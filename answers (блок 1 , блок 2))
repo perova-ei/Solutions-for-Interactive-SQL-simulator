@@ -472,3 +472,414 @@ CREATE TABLE back_payment AS
 
 SELECT * FROM  back_payment; 
                   
+2.2.1 Вывести название, жанр и цену тех книг, количество которых больше 8, в отсортированном по убыванию цены виде.
+
+SELECT title, 
+       name_genre, 
+       price 
+FROM   book 
+       INNER JOIN genre 
+               ON book.genre_id = genre.genre_id 
+WHERE  amount > 8 
+ORDER  BY price DESC 
+
+2.2.2. Вывести все жанры, которые не представлены в книгах на складе.
+
+SELECT name_genre 
+FROM   genre 
+       LEFT JOIN book 
+              ON genre.genre_id = book.genre_id 
+WHERE  title IS NULL 
+
+2.2.3 Необходимо в каждом городе провести выставку книг каждого автора в течение 2020 года. Дату проведения выставки выбрать случайным образом. Создать запрос, который выведет город, автора и дату проведения выставки. 
+
+SELECT name_city, 
+       name_author, 
+       DATE_ADD('2020-01-01', INTERVAL FLOOR(RAND() * 365) day) AS Дата 
+FROM   city, 
+       author 
+ORDER  BY name_city, 
+          Дата DESC 
+          
+2.2.4 Вывести информацию о книгах (жанр, книга, автор), относящихся к жанру, включающему слово «роман» в отсортированном по названиям книг виде.
+
+SELECT name_genre, 
+       title, 
+       name_author 
+FROM   genre 
+       INNER JOIN book 
+               ON genre.genre_id = book.genre_id 
+       INNER JOIN author 
+               ON book.author_id = author.author_id 
+WHERE  name_genre = 'Роман' 
+ORDER  BY title 
+
+2.2.5 Посчитать количество экземпляров  книг каждого автора на складе.  Вывести тех авторов,  количество книг которых меньше 10, в отсортированном по возрастанию количества виде.
+
+SELECT name_author, 
+       SUM(amount) AS Количество 
+FROM   author 
+       LEFT JOIN book 
+              ON author.author_id = book.author_id 
+GROUP  BY name_author 
+HAVING SUM(amount) < 10 
+        OR COUNT(title) = 0 
+ORDER  BY Количество 
+
+2.2.6 Вывести в алфавитном порядке всех авторов, которые пишут только в одном жанре. 
+Поскольку у нас в таблицах так занесены данные, что у каждого автора книги только в одном жанре,  для этого запроса внесем изменения в таблицу book. 
+Пусть у нас  книга Есенина «Черный человек» относится к жанру «Роман», а книга Булгакова «Белая гвардия» к «Приключениям»
+
+SELECT name_author 
+FROM   author 
+WHERE  author_id IN (SELECT author_id 
+                     FROM   (SELECT author_id, 
+                                    genre_id 
+                             FROM   book 
+                             GROUP  BY author_id, 
+                                       genre_id) query_in 
+                     GROUP  BY author_id 
+                     HAVING COUNT(genre_id) = 1) 
+                     
+2.2.7 Вывести информацию о книгах, написанных в самых популярных жанрах, в отсортированном в алфавитном порядке по названию книг виде.
+
+SELECT title, 
+       name_author, 
+       genre_name.name_genre, 
+       price, 
+       amount 
+FROM   book 
+       INNER JOIN author 
+               ON author.author_id = book.author_id 
+       INNER JOIN (SELECT genre.genre_id, 
+                          genre.name_genre 
+                   FROM   (SELECT genre_id, 
+                                  SUM(amount) AS sum_amount 
+                           FROM   book 
+                           GROUP  BY genre_id 
+                           HAVING sum_amount >= MAX(sum_amount)) AS pop_genre 
+                          JOIN genre 
+                            ON genre.genre_id = pop_genre.genre_id) AS 
+                  genre_name 
+               ON book.genre_id = genre_name.genre_id 
+ORDER  BY title 
+
+2.2.8 Если в таблицах supply  и book есть одинаковые книги, которые имеют равную цену,  вывести их название и автора, а также посчитать общее количество экземпляров книг в таблицах supply и book.
+
+SELECT book.title  AS Название, 
+       name_author  AS Автор, 
+       ( book.amount + supply.amount ) AS Количество 
+FROM   author 
+       JOIN book using(author_id) 
+       JOIN supply 
+         ON book.title = supply.title 
+WHERE  book.price = supply.price 
+
+2.3.1 Для книг, которые уже есть на складе (в таблице book), но по другой цене, чем в поставке (supply),  
+необходимо в таблице book увеличить количество на значение, указанное в поставке,  и пересчитать цену. А в таблице  supply обнулить количество этих книг.
+
+UPDATE book 
+       INNER JOIN author 
+               ON book.author_id = author.author_id 
+       INNER JOIN supply 
+               ON book.title = supply.title 
+                  AND supply.author = author.name_author 
+SET    book.price = IF(book.price <> supply.price, ( book.price * book.amount + 
+                                        supply.price * supply.amount ) / ( 
+book.amount + 
+supply.amount ), book.price), book.amount = book.amount + supply.amount, 
+supply.amount = 0 
+WHERE  book.price <> supply.price; 
+
+SELECT * FROM book; 
+
+SELECT * FROM  supply; 
+
+2.3.2 Включить новых авторов в таблицу author с помощью запроса на добавление, а затем вывести все данные из таблицы author.  
+Новыми считаются авторы, которые есть в таблице supply, но нет в таблице author.
+
+INSERT INTO author 
+            (name_author) 
+SELECT supply.author 
+FROM   author 
+       RIGHT JOIN supply 
+               ON author.name_author = supply.author 
+WHERE  name_author IS NULL; 
+
+2.3.3 Добавить новые книги из таблицы supply в таблицу book на основе сформированного выше запроса. Затем вывести для просмотра таблицу book.
+
+INSERT INTO book 
+            (title, 
+             author_id, 
+             price, 
+             amount) 
+SELECT title, 
+       author_id, 
+       price, 
+       amount 
+FROM   author 
+       INNER JOIN supply 
+               ON author.name_author = supply.author 
+WHERE  amount <> 0; 
+
+2.3.4  Занести для книги «Стихотворения и поэмы» Лермонтова жанр «Поэзия», а для книги «Остров сокровищ» Стивенсона - «Приключения». (Использовать два запроса).
+
+UPDATE book
+SET genre_id = 2
+WHERE book_id = 10;
+
+UPDATE book
+SET genre_id = 3
+WHERE book_id = 11;
+
+2.3.5 Удалить всех авторов и все их книги, общее количество книг которых меньше 20.
+
+DELETE FROM author 
+WHERE  author_id IN (SELECT author_id 
+                     FROM   book 
+                     GROUP  BY author_id 
+                     HAVING Sum(amount) < 20); 
+                     
+2.3.6 Удалить все жанры, количество различных книг в которых меньше 3. В таблицу book для этих жанров установить значение Null
+
+DELETE FROM genre 
+WHERE  genre_id IN (SELECT genre_id 
+                    FROM   book 
+                    GROUP  BY genre_id 
+                    HAVING Count(amount) < 3); 
+                    
+2.3.8 Удалить всех авторов, которые пишут в жанре "Поэзия". Из таблицы book удалить все книги этих авторов. В запросе для отбора авторов использовать полное название жанра, а не его id.
+
+DELETE 
+FROM  author 
+USING   author INNER JOIN book 
+ON    author.author_id = book.author_id 
+WHERE   book.genre_id IN 
+           ( 
+                  SELECT genre_id 
+                  FROM   genre 
+                  WHERE  name_genre = "Поэзия");
+                  
+2.4.1 Вывести все заказы Баранова Павла (какие книги, по какой цене и в каком количестве он заказал) в отсортированном по номеру заказа и названиям книг виде.
+
+SELECT buy.buy_id, 
+       title, 
+       price, 
+       buy_book.amount 
+FROM   book 
+       INNER JOIN buy_book USING (book_id) 
+       INNER JOIN buy USING  (buy_id) 
+       INNER JOIN client USING  (client_id) 
+WHERE  name_client = 'Баранов Павел' 
+ORDER  BY buy.buy_id 
+
+2.4.2 Посчитать, сколько раз была заказана каждая книга, для книги вывести ее автора (нужно посчитать, в каком количестве заказов фигурирует каждая книга).
+
+SELECT name_author, 
+       title, 
+       COUNT(buy_book.amount) AS Количество 
+FROM   author 
+       RIGHT JOIN book USING (author_id) 
+       LEFT JOIN buy_book USING (book_id) 
+GROUP  BY name_author,  title 
+ORDER  BY name_author,  title 
+
+2.4.3 Вывести города, в которых живут клиенты, оформлявшие заказы в интернет-магазине. Указать количество заказов в каждый город.
+
+SELECT name_city, 
+       COUNT(client_id) AS Количество 
+FROM   city 
+       JOIN client USING (city_id) 
+       JOIN buy USING (client_id) 
+GROUP  BY name_city 
+ORDER  BY Количество  DESC, name_city 
+
+2.4.4 Вывести номера всех оплаченных заказов и даты, когда они были оплачены.
+
+SELECT buy_id, 
+       date_step_end 
+FROM   buy_step 
+WHERE  buy_step.step_id = 1 
+       AND date_step_end IS NOT NULL 
+       
+2.4.5 Вывести информацию о каждом заказе: его номер, кто его сформировал (фамилия пользователя) и его стоимость (сумма произведений количества заказанных книг и их цены).
+
+SELECT buy.buy_id, 
+       name_client, 
+       Sum(book.price * buy_book.amount) AS Стоимость 
+FROM   client 
+       JOIN buy USING (client_id) 
+       JOIN buy_book USING (buy_id) 
+       JOIN book USING (book_id) 
+GROUP  BY buy.buy_id, 
+          name_client 
+ORDER  BY buy.buy_id 
+
+2.4.6 Вывести все заказы и названия этапов, на которых они в данный момент находятся. Если заказ доставлен –  информацию о нем не выводить.
+
+SELECT DISTINCT buy_id, 
+                name_step 
+FROM   step 
+       JOIN buy_step USING(step_id) 
+WHERE  date_step_end IS NULL 
+       AND date_step_beg IS NOT NULL 
+ORDER  BY buy_id 
+
+2.4.7 Для тех заказов, которые прошли этап транспортировки, вывести количество дней за которое заказ реально доставлен в город. 
+А также, если заказ доставлен с опозданием, указать количество дней задержки, в противном случае вывести 0. 
+
+SELECT buy.buy_id, 
+       DATEDIFF(buy_step.date_step_end, buy_step.date_step_beg) AS 
+       Количество_дней, 
+       IF(city.days_delivery - DATEDIFF(buy_step.date_step_end, 
+                               buy_step.date_step_beg) >= 
+          0, 0, DATEDIFF(buy_step.date_step_end, buy_step.date_step_beg) - 
+                city.days_delivery) AS Опоздание 
+FROM   city 
+       JOIN client 
+         ON client.city_id = city.city_id 
+       JOIN buy 
+         ON buy.client_id = client.client_id 
+       JOIN buy_step 
+         ON buy_step.buy_id = buy.buy_id 
+WHERE  buy_step.step_id = 3 
+       AND buy_step.date_step_end IS NOT NULL 
+ORDER  BY buy.buy_id 
+
+2.4.8 Выбрать всех клиентов, которые заказывали книги Достоевского, информацию вывести в отсортированном по алфавиту виде.
+
+SELECT name_client 
+FROM   client 
+       JOIN buy USING (client_id) 
+       JOIN buy_book USING (buy_id) 
+       JOIN book USING (book_id) 
+       JOIN author USING (author_id) 
+WHERE  name_author LIKE '%Достоев%' 
+ORDER  BY name_client 
+
+2.4.9 Вывести жанр (или жанры), в котором было заказано больше всего экземпляров книг, указать это количество .
+
+SELECT name_genre, 
+       SUM(buy_book.amount) AS Количество 
+FROM   genre 
+       JOIN book USING (genre_id) 
+       JOIN buy_book USING (book_id) 
+GROUP  BY name_genre 
+HAVING SUM(buy_book.amount) = (SELECT 
+       MAX(Количество) AS max_Количество 
+                               FROM   (SELECT 
+              genre_id, 
+              SUM(buy_book.amount) AS Количество 
+                                       FROM   book 
+                                              INNER JOIN buy_book USING(book_id) 
+                                       GROUP  BY genre_id) AS query1); 
+                                       
+2.4.10 Сравнить ежемесячную выручку от продажи книг за текущий и предыдущий годы.
+
+SELECT Year(date_payment) AS Год, 
+       MONTHNAME(date_payment)  AS Месяц, 
+       Sum(price * buy_archive.amount) AS Сумма 
+FROM   buy_archive 
+GROUP  BY Year(date_payment), 
+          MONTHNAME(date_payment) 
+UNION 
+SELECT Year(date_step_end) AS Год, 
+       MONTHNAME(date_step_end) AS Месяц, 
+       Sum(price * buy_book.amount) AS Сумма 
+FROM   book 
+       INNER JOIN buy_book USINGg(book_id) 
+       INNER JOIN buy USING(buy_id) 
+       INNER JOIN buy_step USING(buy_id) 
+       INNER JOIN step USING(step_id) 
+WHERE  date_step_end IS NOT NULL 
+       AND name_step = "Оплата" 
+GROUP  BY Year(date_step_end), 
+          MONTHNAME(date_step_end) 
+ORDER  BY Месяц
+
+2.5.1 Включить нового человека в таблицу с клиентами. Его имя Попов Илья, его email popov@test, проживает он в Москве.
+
+INSERT INTO client (name_client, city_id, email)
+    SELECT 'Попов Илья', city_id, 'popov@test'
+    FROM city
+    WHERE name_city = 'Москва';
+
+2.5.2 Создать новый заказ для Попова Ильи. Его комментарий для заказа: «Связаться со мной по вопросу доставки».
+
+INSERT INTO buy(buy_description, client_id)
+    SELECT 'Связаться со мной по вопросу доставки', client_id
+    FROM client
+    WHERE name_client = 'Попов Илья';
+    
+2.5.3 В таблицу buy_book добавить заказ с номером 5. Этот заказ должен содержать книгу Пастернака «Лирика» в количестве двух экземпляров и книгу Булгакова «Белая гвардия» в одном экземпляре.
+
+INSERT INTO buy_book(buy_id, book_id, amount)
+    SELECT 5, book_id, 2
+    FROM book
+    WHERE title = 'Лирика';
+
+INSERT INTO buy_book(buy_id, book_id, amount)
+    SELECT 5, book_id, 1
+    FROM book
+    WHERE title = 'Белая Гвардия';
+    
+2.5.4 Количество тех книг на складе, которые были включены в заказ с номером 5, уменьшить на то количество, которое в заказе с номером 5  указано.
+
+UPDATE book 
+       JOIN buy_book using(book_id) 
+SET    book.amount = book.amount - buy_book.amount 
+WHERE  buy_book.buy_id = 5;
+
+2.5.5 Создать счет (таблицу buy_pay) на оплату заказа с номером 5, в который включить название книг, их автора, цену, количество заказанных книг и  стоимость.
+
+CREATE TABLE buy_pay AS 
+  SELECT title, 
+         name_author, 
+         price, 
+         buy_book.amount, 
+         price * buy_book.amount AS Стоимость 
+  FROM   author 
+         JOIN book USING(author_id) 
+         JOIN buy_book USING(book_id) 
+  WHERE  buy_id = 5 
+  ORDER  BY title; 
+  
+2.5.6 Создать общий счет (таблицу buy_pay) на оплату заказа с номером 5. Куда включить номер заказа, количество книг в заказе и его общую стоимость. 
+Для решения используйте ОДИН запрос.  
+
+CREATE TABLE buy_pay AS 
+  SELECT buy_id, 
+         Sum(buy_book.amount)  AS Количество, 
+         Sum(book.price * buy_book.amount) AS Итого 
+  FROM   buy_book 
+         JOIN book USING(book_id) 
+  WHERE  buy_id = 5; 
+  
+2.5.7 В таблицу buy_step для заказа с номером 5 включить все этапы из таблицы step, которые должен пройти этот заказ. 
+В столбцы date_step_beg и date_step_end всех записей занести Null.  
+
+INSERT INTO buy_step 
+            (buy_step.buy_id, 
+             step_id) 
+SELECT buy_id, 
+       step_id 
+FROM   buy 
+       CROSS JOIN step 
+WHERE  buy_id = 5; 
+
+2.5.8 В таблицу buy_step занести дату 12.04.2020 выставления счета на оплату заказа с номером 5.
+
+UPDATE buy_step
+SET date_step_beg='2020-04-12'
+WHERE buy_id=5 and step_id=1;
+
+2.5.9 Завершить этап «Оплата» для заказа с номером 5, вставив в столбец date_step_end дату 13.04.2020, и начать следующий этап («Упаковка»), 
+задав в столбце date_step_beg для этого этапа ту же дату.
+
+UPDATE buy_step
+SET date_step_end='2020-04-13'
+WHERE buy_id=5 AND step_id=1;
+
+UPDATE buy_step
+SET date_step_beg='2020-04-13'
+WHERE buy_id=5 AND step_id=2;
