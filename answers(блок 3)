@@ -234,3 +234,22 @@ WHERE  name_subject IN ( 'Математика', 'Информатика' )
 GROUP  BY name_program 
 HAVING COUNT(*) = 2 
 ORDER  BY name_program 
+
+3.3.9 Посчитать количество баллов каждого абитуриента на каждую образовательную программу, на которую он подал заявление, по результатам ЕГЭ. 
+В отсортированном сначала по образовательной программе, а потом по убыванию суммы баллов виде.
+
+SELECT name_program,
+       name_enrollee,
+       SUM(result) AS itog
+FROM   enrollee
+       JOIN program_enrollee using(enrollee_id)
+       JOIN program using(program_id)
+       JOIN program_subject using(program_id)
+       JOIN subject
+         ON program_subject.subject_id = subject.subject_id
+       JOIN enrollee_subject
+         ON subject.subject_id = enrollee_subject.subject_id
+            AND enrollee_subject.enrollee_id = enrollee.enrollee_id
+GROUP  BY name_program, name_enrollee
+ORDER  BY name_program, itog DESC 
+
